@@ -125,8 +125,9 @@ std::string LLMSerializer::serializeBaseState(Base* base, SavedGame* save, Mod* 
 
 	int totalSoldiers = base->getTotalSoldiers();
 	int availableSoldiers = base->getAvailableSoldiers();
+	int assignedSoldiers = totalSoldiers - availableSoldiers;
 	ss << "  Soldiers: " << totalSoldiers << "/" << base->getAvailableQuarters()
-	   << " (" << availableSoldiers << " available for mission)\n";
+	   << " (" << assignedSoldiers << " on crafts, " << availableSoldiers << " available for base defense)\n";
 
 	int totalScientists = base->getScientists();
 	int allocatedScientists = base->getAllocatedScientists();
