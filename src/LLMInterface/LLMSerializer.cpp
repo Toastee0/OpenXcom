@@ -25,6 +25,7 @@
 #include "../Savegame/Soldier.h"
 #include "../Savegame/Craft.h"
 #include "../Savegame/CraftWeapon.h"
+#include "../Savegame/Vehicle.h"
 #include "../Savegame/ItemContainer.h"
 #include "../Savegame/Country.h"
 #include "../Savegame/Region.h"
@@ -316,6 +317,41 @@ std::string LLMSerializer::serializeCraftRoster(Base* base, Mod* mod, Language* 
 			ss << ", " << craft->getNumVehicles() << "/" << rules->getVehicles() << " vehicles";
 		}
 		ss << "\n";
+
+		// Equipment loaded on craft
+		ItemContainer* items = craft->getItems();
+		std::map<std::string, int>* contents = items->getContents();
+		if (!contents->empty())
+		{
+			ss << "    Equipment: ";
+			int itemCount = 0;
+			for (std::map<std::string, int>::const_iterator it = contents->begin(); it != contents->end(); ++it)
+			{
+				if (itemCount > 0) ss << ", ";
+				ss << it->second << "x " << lang->getString(it->first);
+				itemCount++;
+				if (itemCount >= 10) break; // Limit to first 10 items
+			}
+			if (contents->size() > 10)
+			{
+				ss << ", +" << (contents->size() - 10) << " more";
+			}
+			ss << "\n";
+		}
+
+		// Vehicles (tanks/HWPs) on craft
+		std::vector<Vehicle*>* vehicles = craft->getVehicles();
+		if (!vehicles->empty())
+		{
+			ss << "    Vehicles: ";
+			for (size_t v = 0; v < vehicles->size(); ++v)
+			{
+				if (v > 0) ss << ", ";
+				Vehicle* vehicle = (*vehicles)[v];
+				ss << lang->getString(vehicle->getRules()->getType());
+			}
+			ss << "\n";
+		}
 	}
 
 	return ss.str();
@@ -447,6 +483,43 @@ std::string LLMSerializer::serializeResearchState(SavedGame* save, Mod* mod, Lan
 	// Completed research count
 	ss << "\nCompleted Research: " << save->getDiscoveredResearch().size() << " topics\n";
 
+	// Available research topics (across all bases)
+	ss << "\nAvailable Research Topics:\n";
+	bool hasAvailable = false;
+	for (size_t b = 0; b < bases->size(); ++b)
+	{
+		Base* base = (*bases)[b];
+		std::vector<RuleResearch*> availableProjects;
+		save->getAvailableResearchProjects(availableProjects, mod, base);
+
+		if (!availableProjects.empty() && !hasAvailable)
+		{
+			hasAvailable = true;
+		}
+
+		// Show first 15 available projects (to avoid spam)
+		for (size_t i = 0; i < availableProjects.size() && i < 15; ++i)
+		{
+			RuleResearch* research = availableProjects[i];
+			ss << "  " << lang->getString(research->getName()) << " (cost: " << research->getCost() << ")\n";
+		}
+
+		// Only show from first base with available research
+		if (!availableProjects.empty())
+		{
+			if (availableProjects.size() > 15)
+			{
+				ss << "  ... and " << (availableProjects.size() - 15) << " more topics\n";
+			}
+			break;
+		}
+	}
+
+	if (!hasAvailable)
+	{
+		ss << "  None available\n";
+	}
+
 	return ss.str();
 }
 
@@ -503,6 +576,45 @@ std::string LLMSerializer::serializeManufacturing(SavedGame* save, Mod* mod, Lan
 	if (!hasProduction)
 	{
 		ss << "  No active production\n";
+	}
+
+	// Available manufacturing items (across all bases)
+	ss << "\nAvailable Manufacturing:\n";
+	bool hasAvailableManufacture = false;
+	for (size_t b = 0; b < bases->size(); ++b)
+	{
+		Base* base = (*bases)[b];
+		std::vector<RuleManufacture*> availableManufacture;
+		save->getAvailableProductions(availableManufacture, mod, base);
+
+		if (!availableManufacture.empty() && !hasAvailableManufacture)
+		{
+			hasAvailableManufacture = true;
+		}
+
+		// Show first 15 available items (to avoid spam)
+		for (size_t i = 0; i < availableManufacture.size() && i < 15; ++i)
+		{
+			RuleManufacture* item = availableManufacture[i];
+			ss << "  " << lang->getString(item->getName())
+			   << " (" << item->getManufactureTime() << " hrs, "
+			   << formatMoney(item->getManufactureCost()) << ")\n";
+		}
+
+		// Only show from first base with available manufacturing
+		if (!availableManufacture.empty())
+		{
+			if (availableManufacture.size() > 15)
+			{
+				ss << "  ... and " << (availableManufacture.size() - 15) << " more items\n";
+			}
+			break;
+		}
+	}
+
+	if (!hasAvailableManufacture)
+	{
+		ss << "  None available\n";
 	}
 
 	return ss.str();
