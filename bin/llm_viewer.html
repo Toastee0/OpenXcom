@@ -106,8 +106,13 @@
             cursor: pointer;
             transition: all 0.2s;
             min-height: 200px;
-            max-height: 600px;
+            max-height: 800px;
             overflow: auto;
+        }
+
+        /* Base map box needs more height for grid + legend */
+        .box.base-map {
+            max-height: 1000px;
         }
 
         .box:hover {
@@ -428,6 +433,11 @@
         function createBox(title, content) {
             const box = document.createElement('div');
             box.className = 'box';
+
+            // Base map needs extra height for grid + legend
+            if (title === 'BASE MAP') {
+                box.classList.add('base-map');
+            }
 
             const titleDiv = document.createElement('div');
             titleDiv.className = 'box-title';
