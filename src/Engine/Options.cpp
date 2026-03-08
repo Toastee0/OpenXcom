@@ -292,6 +292,14 @@ void create()
 	_info.push_back(OptionInfo("FPSInactive", &FPSInactive, 30, "STR_FPS_INACTIVE_LIMIT", "STR_GENERAL"));
 #endif
 
+	// LLM Interface options
+	_info.push_back(OptionInfo("llmInterfaceEnabled", &llmInterfaceEnabled, false));
+	_info.push_back(OptionInfo("llmGeoscapeEnabled", &llmGeoscapeEnabled, true));
+	_info.push_back(OptionInfo("llmBattlescapeEnabled", &llmBattlescapeEnabled, false));
+	_info.push_back(OptionInfo("llmOutputToLog", &llmOutputToLog, true));
+	_info.push_back(OptionInfo("llmOutputToFile", &llmOutputToFile, false));
+	_info.push_back(OptionInfo("llmOutputPath", &llmOutputPath, "llm_output.txt"));
+
 }
 
 // we can get fancier with these detection routines, but for now just look for

@@ -343,6 +343,12 @@ set ( ufopedia_src
   Ufopaedia/UfopaediaStartState.cpp
 )
 
+set ( llminterface_src
+  LLMInterface/LLMConfig.cpp
+  LLMInterface/LLMSerializer.cpp
+  LLMInterface/LLMTriggerManager.cpp
+)
+
 # NOTE: to build with clang *and* libc++ on Linux, you need to call cmake like so:
 # cmake -D CMAKE_C_COMPILER=clang -D CMAKE_CXX_COMPILER=clang++ \
 #     -D CMAKE_CXX_FLAGS=-stdlib=libc++ -D CMAKE_EXE_LINKER_FLAGS=-stdlib=libc++
@@ -427,7 +433,7 @@ if ( WIN32 )
   set ( openxcom_icon OpenXcom.rc )
 endif ()
 
-set ( openxcom_src ${root_src} ${basescape_src} ${battlescape_src} ${engine_src} ${geoscape_src} ${interface_src} ${menu_src} ${mod_src} ${savegame_src} ${ufopedia_src} )
+set ( openxcom_src ${root_src} ${basescape_src} ${battlescape_src} ${engine_src} ${geoscape_src} ${interface_src} ${menu_src} ${mod_src} ${savegame_src} ${ufopedia_src} ${llminterface_src} )
 
 set ( install_dest RUNTIME )
 set ( set_exec_path ON )

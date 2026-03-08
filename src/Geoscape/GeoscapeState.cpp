@@ -77,6 +77,7 @@
 #include "NewPossibleResearchState.h"
 #include "NewPossibleManufactureState.h"
 #include "../Savegame/Production.h"
+#include "../LLMInterface/LLMTriggerManager.h"
 #include "../Mod/RuleManufacture.h"
 #include "../Savegame/ItemContainer.h"
 #include "../Savegame/MissionSite.h"
@@ -727,6 +728,7 @@ void GeoscapeState::time5Seconds()
 				{
 					MissionSite *site = _game->getSavedGame()->getMissionSites()->back();
 					site->setDetected(true);
+					LLMTriggerManager::onGeoscapeTrigger("MISSION_DETECTED", _game->getSavedGame(), _game->getMod(), _game->getLanguage());
 					popup(new MissionDetectedState(site, this));
 				}
 				// If UFO was destroyed, don't spawn missions
@@ -1327,6 +1329,7 @@ void GeoscapeState::time30Minutes()
 				if (detected)
 				{
 					(*u)->setDetected(true);
+					LLMTriggerManager::onGeoscapeTrigger("UFO_DETECTED", _game->getSavedGame(), _game->getMod(), _game->getLanguage());
 					popup(new UfoDetectedState((*u), this, true, (*u)->getHyperDetected()));
 				}
 			}
@@ -1446,6 +1449,7 @@ void GeoscapeState::time1Hour()
 		{
 			if (j->second > PROGRESS_NOT_COMPLETE)
 			{
+				LLMTriggerManager::onGeoscapeTrigger("PRODUCTION_COMPLETE", _game->getSavedGame(), _game->getMod(), _game->getLanguage());
 				popup(new ProductionCompleteState((*i),  tr(j->first->getRules()->getName()), this, j->second));
 				(*i)->removeProduction(j->first);
 			}
@@ -1462,6 +1466,7 @@ void GeoscapeState::time1Hour()
 		if (!(*i)->getDetected())
 		{
 			(*i)->setDetected(true);
+			LLMTriggerManager::onGeoscapeTrigger("TERROR_SITE", _game->getSavedGame(), _game->getMod(), _game->getLanguage());
 			popup(new MissionDetectedState(*i, this));
 			break;
 		}
@@ -1612,6 +1617,7 @@ void GeoscapeState::time1Day()
 				popup(new CutsceneState(bonus->getCutscene()));
 			}
 			// 3e. handle research complete popup + ufopedia article popups (topic+bonus)
+			LLMTriggerManager::onGeoscapeTrigger("RESEARCH_COMPLETE", _game->getSavedGame(), _game->getMod(), _game->getLanguage());
 			popup(new ResearchCompleteState(newResearch, bonus, research));
 			// 3f. reset timer
 			timerReset();
@@ -1765,6 +1771,7 @@ void GeoscapeState::time1Month()
 	// Handle funding
 	timerReset();
 	_game->getSavedGame()->monthlyFunding();
+	LLMTriggerManager::onGeoscapeTrigger("MONTH_END", _game->getSavedGame(), _game->getMod(), _game->getLanguage());
 	popup(new MonthlyReportState(psi, _globe));
 
 	// Handle Xcom Operatives discovering bases
@@ -1878,6 +1885,7 @@ void GeoscapeState::btnBasesClick(Action *)
 	timerReset();
 	if (!_game->getSavedGame()->getBases()->empty())
 	{
+		LLMTriggerManager::onGeoscapeTrigger("BASE_OPENED", _game->getSavedGame(), _game->getMod(), _game->getLanguage());
 		_game->pushState(new BasescapeState(_game->getSavedGame()->getSelectedBase(), _globe));
 	}
 	else
