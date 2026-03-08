@@ -19,6 +19,7 @@
 #include "LLMSerializer.h"
 #include "LLMConfig.h"
 #include "../Savegame/SavedGame.h"
+#include "../Savegame/GameTime.h"
 #include "../Savegame/Base.h"
 #include "../Savegame/BaseFacility.h"
 #include "../Savegame/Soldier.h"
@@ -59,7 +60,17 @@ std::string LLMSerializer::serializeGeoscapeState(SavedGame* save, Mod* mod, Lan
 	// Header with trigger information
 	ss << "========== GEOSCAPE STATE ==========\n";
 	ss << "TRIGGER: " << triggerName << "\n";
-	ss << "DATE: " << save->getTime()->getDayString(lang) << "\n";
+
+	// Format date as "Month Day, Year"
+	GameTime* time = save->getTime();
+	int day = time->getDay();
+	std::string daySuffix;
+	if (day == 1 || day == 21 || day == 31) daySuffix = "st";
+	else if (day == 2 || day == 22) daySuffix = "nd";
+	else if (day == 3 || day == 23) daySuffix = "rd";
+	else daySuffix = "th";
+
+	ss << "DATE: " << time->getMonthString() << " " << day << daySuffix << ", " << time->getYear() << "\n";
 	ss << "\n";
 
 	// Finances overview
@@ -197,8 +208,19 @@ std::string LLMSerializer::serializeFinances(SavedGame* save, Mod* mod, Language
 		int satisfaction = country->getSatisfaction();
 		int64_t funding = country->getFunding().back();
 
+		// Map satisfaction level to label (0=Alien Pact, 1=Unhappy, 2=Satisfied, 3=Happy)
+		std::string satisfactionLabel;
+		switch (satisfaction)
+		{
+			case 0: satisfactionLabel = "Alien Pact"; break;
+			case 1: satisfactionLabel = "Unhappy"; break;
+			case 2: satisfactionLabel = "Satisfied"; break;
+			case 3: satisfactionLabel = "Happy"; break;
+			default: satisfactionLabel = "Unknown"; break;
+		}
+
 		ss << "  " << name << ": " << formatMoney(funding)
-		   << " (Satisfaction: " << satisfaction << ")\n";
+		   << " (Satisfaction: " << satisfactionLabel << ")\n";
 	}
 
 	return ss.str();
@@ -264,7 +286,7 @@ std::string LLMSerializer::serializeCraftRoster(Base* base, Mod* mod, Language* 
 		RuleCraft* rules = craft->getRules();
 
 		ss << "  " << craft->getName(lang) << " (" << lang->getString(rules->getType()) << ")\n";
-		ss << "    Status: " << craft->getStatus() << "\n";
+		ss << "    Status: " << lang->getString(craft->getStatus()) << "\n";
 		ss << "    Fuel: " << craft->getFuelPercentage() << "%\n";
 		ss << "    Damage: " << craft->getDamagePercentage() << "%\n";
 		ss << "    Speed: " << rules->getMaxSpeed() << "\n";
@@ -315,12 +337,21 @@ std::string LLMSerializer::serializeBaseLayout(Base* base, Mod* mod, Language* l
 	}
 
 	// Fill grid with facilities
+	int hangarCount = 0;
 	for (size_t i = 0; i < facilities->size(); ++i)
 	{
 		BaseFacility* facility = (*facilities)[i];
 		int x = facility->getX();
 		int y = facility->getY();
-		std::string code = LLMConfig::getFacilityCode(facility->getRules()->getType());
+		std::string facilityType = facility->getRules()->getType();
+		std::string code = LLMConfig::getFacilityCode(facilityType);
+
+		// Assign unique hangar IDs (H1, H2, H3, H4)
+		if (code == "H1" || code == "H2" || code == "H3" || code == "H4")
+		{
+			hangarCount++;
+			code = "H" + std::to_string(hangarCount);
+		}
 
 		// Handle 2x2 facilities (hangars)
 		RuleBaseFacility* rules = facility->getRules();
@@ -500,7 +531,7 @@ std::string LLMSerializer::serializeSoldierRoster(SavedGame* save, Mod* mod, Lan
 			Soldier* soldier = (*soldiers)[i];
 			UnitStats* stats = soldier->getCurrentStats();
 
-			ss << "  " << soldier->getName() << " (" << soldier->getRankString() << ")\n";
+			ss << "  " << soldier->getName() << " (" << lang->getString(soldier->getRankString()) << ")\n";
 			ss << "    TUs: " << stats->tu << "  Stamina: " << stats->stamina
 			   << "  Health: " << stats->health << "  Bravery: " << stats->bravery << "\n";
 			ss << "    Reactions: " << stats->reactions << "  Firing: " << stats->firing
@@ -525,7 +556,7 @@ std::string LLMSerializer::serializeSoldierRoster(SavedGame* save, Mod* mod, Lan
 			// Armor
 			if (soldier->getArmor() != 0)
 			{
-				ss << "    Armour: " << soldier->getArmor()->getType() << "\n";
+				ss << "    Armour: " << lang->getString(soldier->getArmor()->getType()) << "\n";
 			}
 
 			totalSoldiers++;
