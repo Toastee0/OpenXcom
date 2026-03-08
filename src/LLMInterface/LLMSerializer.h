@@ -68,11 +68,12 @@ public:
 	 * Serialize base layout (6x6 facility grid).
 	 * Spec section 3.2.3
 	 * @param base The base whose layout to serialize
+	 * @param save The saved game (for research ACL)
 	 * @param mod The current mod
 	 * @param lang The current language
 	 * @return Text representation of base layout
 	 */
-	static std::string serializeBaseLayout(Base* base, Mod* mod, Language* lang);
+	static std::string serializeBaseLayout(Base* base, SavedGame* save, Mod* mod, Language* lang);
 
 	/**
 	 * Serialize research state (current and available research).
@@ -138,7 +139,7 @@ private:
 	// Helper methods
 	static std::string formatMoney(int64_t amount);
 	static std::string formatPercentage(int value);
-	static std::string getRegionName(double lat, double lon, SavedGame* save);
+	static std::string getRegionName(double lat, double lon, SavedGame* save, Language* lang);
 };
 
 }

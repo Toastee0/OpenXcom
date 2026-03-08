@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenXcom LLM Interface Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #00ff00;
+            padding-bottom: 10px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #00ff00;
+        }
+
+        .file-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .file-controls input[type="file"] {
+            flex: 1;
+            background: #2a2a2a;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 8px;
+            cursor: pointer;
+        }
+
+        .file-controls button {
+            background: #2a2a2a;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+        }
+
+        .file-controls button:hover {
+            background: #00ff00;
+            color: #1a1a1a;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 2px;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            background: #2a2a2a;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+        }
+
+        .tab.active {
+            background: #00ff00;
+            color: #1a1a1a;
+            font-weight: bold;
+        }
+
+        .tab:hover:not(.active) {
+            background: #3a3a3a;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .box {
+            background: #2a2a2a;
+            border: 2px solid #00ff00;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-height: 200px;
+            max-height: 600px;
+            overflow: auto;
+        }
+
+        .box:hover {
+            background: #3a3a3a;
+            box-shadow: 0 0 10px #00ff00;
+        }
+
+        .box.copied {
+            border-color: #ffff00;
+            background: #3a3a00;
+        }
+
+        .box-title {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #ffff00;
+            border-bottom: 1px solid #00ff00;
+            padding-bottom: 5px;
+        }
+
+        .box-content {
+            white-space: pre-wrap;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 20px;
+            background: #2a2a2a;
+            border: 1px solid #00ff00;
+        }
+
+        .status.error {
+            border-color: #ff0000;
+            color: #ff0000;
+        }
+
+        .status.success {
+            border-color: #00ff00;
+            color: #00ff00;
+        }
+
+        /* Scrollbar styling */
+        .box::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .box::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        .box::-webkit-scrollbar-thumb {
+            background: #00ff00;
+        }
+
+        .box::-webkit-scrollbar-thumb:hover {
+            background: #00cc00;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>▄▄▄ OPENXCOM LLM INTERFACE VIEWER ▄▄▄</h1>
+        <p>Click any box to copy its contents to clipboard</p>
+    </div>
+
+    <div class="file-controls">
+        <input type="file" id="fileInput" accept=".txt">
+        <button id="reloadBtn">Reload File</button>
+        <button id="autoRefreshBtn">Auto-Refresh: OFF</button>
+        <button id="loadDefaultBtn" title="Opens file picker at Documents folder">Load Default Path</button>
+    </div>
+    <div style="text-align: center; color: #666; font-size: 11px; margin-bottom: 10px;">
+        Default location: C:\Users\digit\Documents\OpenXcom\llm_output.txt
+    </div>
+
+    <div id="status" class="status" style="display: none;"></div>
+
+    <div class="tabs">
+        <div class="tab active" data-tab="geoscape">GEOSCAPE</div>
+        <div class="tab" data-tab="battlescape">BATTLESCAPE</div>
+    </div>
+
+    <div id="geoscape" class="tab-content active">
+        <div class="grid" id="geoscapeGrid">
+            <div class="empty-state">
+                Select llm_output.txt file above to load game state
+            </div>
+        </div>
+    </div>
+
+    <div id="battlescape" class="tab-content">
+        <div class="grid" id="battlescapeGrid">
+            <div class="empty-state">
+                Battlescape viewer coming soon...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentFile = null;
+        let autoRefreshInterval = null;
+        let isAutoRefresh = false;
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // File input
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            currentFile = e.target.files[0];
+            if (currentFile) {
+                // Remember this file for next time
+                localStorage.setItem('lastFilePath', currentFile.name);
+
+                // Copy file path to clipboard (browsers only give us the filename for security)
+                const filePath = e.target.value || currentFile.name;
+                navigator.clipboard.writeText(filePath).then(() => {
+                    showStatus('File path copied to clipboard: ' + currentFile.name, 'success');
+                }).catch(() => {
+                    showStatus('File loaded: ' + currentFile.name, 'success');
+                });
+
+                loadFile();
+            }
+        });
+
+        // Load default button - just triggers file picker
+        document.getElementById('loadDefaultBtn').addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+
+        // Reload button
+        document.getElementById('reloadBtn').addEventListener('click', () => {
+            if (currentFile) {
+                loadFile();
+            } else {
+                showStatus('No file selected', 'error');
+            }
+        });
+
+        // Auto-refresh toggle
+        document.getElementById('autoRefreshBtn').addEventListener('click', () => {
+            isAutoRefresh = !isAutoRefresh;
+            const btn = document.getElementById('autoRefreshBtn');
+
+            if (isAutoRefresh) {
+                btn.textContent = 'Auto-Refresh: ON';
+                autoRefreshInterval = setInterval(() => {
+                    if (currentFile) loadFile();
+                }, 2000); // Refresh every 2 seconds
+                showStatus('Auto-refresh enabled (every 2s)', 'success');
+            } else {
+                btn.textContent = 'Auto-Refresh: OFF';
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+                showStatus('Auto-refresh disabled', 'success');
+            }
+        });
+
+        function showStatus(message, type = 'success') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 3000);
+        }
+
+        function loadFile() {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target.result;
+                parseAndDisplay(content);
+                showStatus('File loaded successfully', 'success');
+            };
+            reader.onerror = () => {
+                showStatus('Error reading file', 'error');
+            };
+            reader.readAsText(currentFile);
+        }
+
+        function parseAndDisplay(content) {
+            // Split by the separator to get individual exports
+            const exports = content.split('========== GEOSCAPE STATE ==========');
+
+            // Get the most recent export (last one)
+            const latestExport = exports[exports.length - 1];
+
+            if (!latestExport || latestExport.trim().length === 0) {
+                showStatus('No data found in file', 'error');
+                return;
+            }
+
+            // Parse sections
+            const sections = parseGeoscapeSections(latestExport);
+
+            // Display in boxes
+            displayGeoscapeBoxes(sections);
+        }
+
+        function parseGeoscapeSections(text) {
+            const sections = {};
+
+            // Extract trigger info
+            const triggerMatch = text.match(/TRIGGER: (.*?)(?:\n|$)/);
+            sections.trigger = triggerMatch ? triggerMatch[1] : 'Unknown';
+
+            // Extract date
+            const dateMatch = text.match(/DATE: (.*?)(?:\n|$)/);
+            sections.date = dateMatch ? dateMatch[1] : 'Unknown';
+
+            // Split text into major sections by looking for section headers
+            // Section headers are lines that end with a colon and are in ALL CAPS or start at column 0
+            const sectionPattern = /^([A-Z][A-Z\s]+):$/gm;
+            const sectionHeaders = [];
+            let match;
+
+            while ((match = sectionPattern.exec(text)) !== null) {
+                sectionHeaders.push({
+                    name: match[1],
+                    index: match.index,
+                    fullMatch: match[0]
+                });
+            }
+
+            // Extract content between section headers
+            function extractSection(sectionName) {
+                const header = sectionHeaders.find(h => h.name === sectionName);
+                if (!header) return '';
+
+                const nextHeader = sectionHeaders.find(h => h.index > header.index);
+                const start = header.index;
+                const end = nextHeader ? nextHeader.index : text.length;
+
+                return text.substring(start, end).trim();
+            }
+
+            // Extract each section
+            sections.finances = extractSection('FINANCES');
+            sections.research = extractSection('RESEARCH');
+            sections.manufacturing = extractSection('MANUFACTURING');
+            sections.soldiers = extractSection('SOLDIER ROSTER');
+            sections.inventory = extractSection('INVENTORY');
+
+            // Base layout includes the legend (from BASE LAYOUT to CRAFT ROSTER)
+            const baseLayoutMatch = text.match(/BASE LAYOUT:([\s\S]*?)(?=CRAFT ROSTER:|$)/);
+            sections.baseLayout = baseLayoutMatch ? 'BASE LAYOUT:\n' + baseLayoutMatch[1].trim() : extractSection('BASE LAYOUT');
+
+            // Base state - extract from "BASE:" to "BASE LAYOUT:"
+            const baseStateMatch = text.match(/BASE: (.*?)\n([\s\S]*?)(?=BASE LAYOUT:|$)/);
+            sections.baseState = baseStateMatch ? 'BASE: ' + baseStateMatch[1] + '\n' + baseStateMatch[2].trim() : '';
+
+            // Craft roster - extract just the crafts section
+            const craftSection = extractSection('CRAFT ROSTER');
+            if (craftSection) {
+                // Try to extract Skyranger specifically
+                const skyrangerMatch = craftSection.match(/(SKYRANGER-\d+[\s\S]*?)(?=\n  [A-Z]|$)/i);
+                if (skyrangerMatch) {
+                    sections.skyranger = 'SKYRANGER:\n' + skyrangerMatch[1].trim();
+                } else {
+                    // Fallback: just take the first craft
+                    sections.skyranger = craftSection;
+                }
+            } else {
+                sections.skyranger = '';
+            }
+
+            return sections;
+        }
+
+        function displayGeoscapeBoxes(sections) {
+            const grid = document.getElementById('geoscapeGrid');
+            grid.innerHTML = '';
+
+            // Define boxes in desired order
+            const boxes = [
+                { title: 'RESEARCH STATE', content: sections.research, key: 'research' },
+                { title: 'FINANCIAL STATE', content: sections.finances, key: 'finances' },
+                { title: 'SKYRANGER CONTENTS', content: sections.skyranger, key: 'skyranger' },
+                { title: 'BARRACKS CONTENTS', content: sections.soldiers, key: 'soldiers' },
+                { title: 'BASE MAP', content: sections.baseLayout, key: 'baseLayout' },
+                { title: 'BASE STATE', content: sections.baseState, key: 'baseState' },
+                { title: 'MANUFACTURING', content: sections.manufacturing, key: 'manufacturing' },
+                { title: 'INVENTORY', content: sections.inventory, key: 'inventory' }
+            ];
+
+            boxes.forEach(box => {
+                if (box.content) {
+                    const boxDiv = createBox(box.title, box.content);
+                    grid.appendChild(boxDiv);
+                }
+            });
+
+            if (grid.children.length === 0) {
+                grid.innerHTML = '<div class="empty-state">No data found</div>';
+            }
+        }
+
+        function createBox(title, content) {
+            const box = document.createElement('div');
+            box.className = 'box';
+
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'box-title';
+            titleDiv.textContent = title;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'box-content';
+            contentDiv.textContent = content;
+
+            box.appendChild(titleDiv);
+            box.appendChild(contentDiv);
+
+            box.addEventListener('click', () => {
+                copyToClipboard(content, box);
+            });
+
+            return box;
+        }
+
+        function copyToClipboard(text, boxElement) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Visual feedback
+                boxElement.classList.add('copied');
+                showStatus('Copied to clipboard!', 'success');
+
+                setTimeout(() => {
+                    boxElement.classList.remove('copied');
+                }, 1000);
+            }).catch(err => {
+                showStatus('Failed to copy to clipboard', 'error');
+                console.error('Copy failed:', err);
+            });
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'r') {
+                e.preventDefault();
+                if (currentFile) loadFile();
+            }
+        });
+    </script>
+</body>
+</html>

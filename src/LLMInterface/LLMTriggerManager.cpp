@@ -64,8 +64,44 @@ void LLMTriggerManager::onGeoscapeTrigger(const std::string& triggerName, SavedG
 		return;
 	}
 
-	// Serialize the current game state
-	std::string output = LLMSerializer::serializeGeoscapeState(save, mod, lang, triggerName);
+	// Build context-specific output based on trigger type
+	std::string output;
+
+	if (triggerName == "RESEARCH_COMPLETE")
+	{
+		// Research completion: only show research + manufacturing (may have unlocked new items)
+		std::ostringstream ss;
+		ss << "========== RESEARCH COMPLETE ==========\n";
+		ss << LLMSerializer::serializeResearchState(save, mod, lang);
+		ss << "\n";
+		ss << LLMSerializer::serializeManufacturing(save, mod, lang);
+		output = ss.str();
+	}
+	else if (triggerName == "PRODUCTION_COMPLETE")
+	{
+		// Production completion: show manufacturing + inventory
+		std::ostringstream ss;
+		ss << "========== PRODUCTION COMPLETE ==========\n";
+		ss << LLMSerializer::serializeManufacturing(save, mod, lang);
+		ss << "\n";
+		ss << LLMSerializer::serializeInventory(save, mod, lang);
+		output = ss.str();
+	}
+	else if (triggerName == "TRANSFER_COMPLETE")
+	{
+		// Transfer arrival: show soldiers + inventory + crafts
+		std::ostringstream ss;
+		ss << "========== TRANSFER COMPLETE ==========\n";
+		ss << LLMSerializer::serializeSoldierRoster(save, mod, lang);
+		ss << "\n";
+		ss << LLMSerializer::serializeInventory(save, mod, lang);
+		output = ss.str();
+	}
+	else
+	{
+		// All other triggers: full geoscape state
+		output = LLMSerializer::serializeGeoscapeState(save, mod, lang, triggerName);
+	}
 
 	// Write to configured destinations
 	writeOutput(output, triggerName);
@@ -93,26 +129,83 @@ void LLMTriggerManager::writeOutput(const std::string& content, const std::strin
 	// Output to file if enabled
 	if (Options::llmOutputToFile)
 	{
-		std::ofstream file;
-		file.open(Options::llmOutputPath, std::ios::app);
+		const int MAX_EXPORTS = Options::llmMaxExports;  // Configurable max exports to keep
+		std::string existingContent;
 
-		if (file.is_open())
+		// Read existing file content
+		std::ifstream inFile(Options::llmOutputPath);
+		if (inFile.is_open())
 		{
+			std::stringstream buffer;
+			buffer << inFile.rdbuf();
+			existingContent = buffer.str();
+			inFile.close();
+		}
+
+		// Count existing exports by looking for the separator
+		const std::string separator = "========================================";
+		size_t exportCount = 0;
+		size_t pos = 0;
+		while ((pos = existingContent.find(separator, pos)) != std::string::npos)
+		{
+			exportCount++;
+			pos += separator.length();
+		}
+		// Each export has 2 separators (start and end), so divide by 2
+		exportCount = exportCount / 2;
+
+		// If we have too many exports, trim the oldest ones
+		if (exportCount >= MAX_EXPORTS)
+		{
+			// Find the position of the (exportCount - MAX_EXPORTS + 1)th export start
+			size_t exportsToRemove = exportCount - MAX_EXPORTS + 1;
+			pos = 0;
+			for (size_t i = 0; i < exportsToRemove * 2; ++i)
+			{
+				pos = existingContent.find(separator, pos);
+				if (pos == std::string::npos) break;
+				pos += separator.length();
+			}
+
+			// Keep only content after this position
+			if (pos != std::string::npos)
+			{
+				// Find the newline before the next separator to get a clean cut
+				size_t cutPos = existingContent.find('\n', pos);
+				if (cutPos != std::string::npos)
+				{
+					existingContent = existingContent.substr(cutPos + 1);
+				}
+			}
+		}
+
+		// Now write the trimmed content + new export
+		std::ofstream outFile(Options::llmOutputPath, std::ios::trunc);
+		if (outFile.is_open())
+		{
+			// Write existing content first (if any)
+			if (!existingContent.empty())
+			{
+				outFile << existingContent;
+			}
+
 			// Get current timestamp
 			std::time_t now = std::time(nullptr);
 			char timestamp[64];
 			std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
 
 			// Write delimiter with timestamp and trigger
-			file << "\n";
-			file << "========================================\n";
-			file << "TIMESTAMP: " << timestamp << "\n";
-			file << "TRIGGER: " << triggerName << "\n";
-			file << "========================================\n";
-			file << content << "\n";
-			file << "\n";
+			outFile << "\n";
+			outFile << "========================================\n";
+			outFile << "TIMESTAMP: " << timestamp << "\n";
+			outFile << "TRIGGER: " << triggerName << "\n";
+			outFile << "========================================\n";
+			outFile << content << "\n";
+			outFile << "\n";
 
-			file.close();
+			outFile.close();
+
+			Log(LOG_INFO) << "[LLM-INTERFACE] Exported to file (keeping last " << MAX_EXPORTS << " exports)";
 		}
 		else
 		{

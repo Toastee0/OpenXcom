@@ -47,6 +47,7 @@
 #include "../Engine/Language.h"
 #include <sstream>
 #include <iomanip>
+#include <set>
 
 namespace OpenXcom
 {
@@ -71,7 +72,7 @@ std::string LLMSerializer::serializeGeoscapeState(SavedGame* save, Mod* mod, Lan
 	else if (day == 3 || day == 23) daySuffix = "rd";
 	else daySuffix = "th";
 
-	ss << "DATE: " << time->getMonthString() << " " << day << daySuffix << ", " << time->getYear() << "\n";
+	ss << "DATE: " << lang->getString(time->getMonthString()) << " " << day << daySuffix << ", " << time->getYear() << "\n";
 	ss << "\n";
 
 	// Finances overview
@@ -85,7 +86,7 @@ std::string LLMSerializer::serializeGeoscapeState(SavedGame* save, Mod* mod, Lan
 		Base* base = (*bases)[i];
 		ss << serializeBaseState(base, save, mod, lang);
 		ss << "\n";
-		ss << serializeBaseLayout(base, mod, lang);
+		ss << serializeBaseLayout(base, save, mod, lang);
 		ss << "\n";
 		ss << serializeCraftRoster(base, mod, lang);
 		ss << "\n";
@@ -125,7 +126,7 @@ std::string LLMSerializer::serializeBaseState(Base* base, SavedGame* save, Mod* 
 	   << base->getLatitude() << ", " << base->getLongitude();
 
 	// Try to get region name
-	std::string region = getRegionName(base->getLatitude(), base->getLongitude(), save);
+	std::string region = getRegionName(base->getLatitude(), base->getLongitude(), save, lang);
 	if (!region.empty())
 	{
 		ss << " (" << region << ")";
@@ -250,7 +251,7 @@ std::string LLMSerializer::formatPercentage(int value)
 /**
  * Get region name for coordinates.
  */
-std::string LLMSerializer::getRegionName(double lat, double lon, SavedGame* save)
+std::string LLMSerializer::getRegionName(double lat, double lon, SavedGame* save, Language* lang)
 {
 	std::vector<Region*>* regions = save->getRegions();
 	for (size_t i = 0; i < regions->size(); ++i)
@@ -258,7 +259,7 @@ std::string LLMSerializer::getRegionName(double lat, double lon, SavedGame* save
 		Region* region = (*regions)[i];
 		if (region->getRules()->insideRegion(lon, lat))
 		{
-			return region->getRules()->getType();
+			return lang->getString(region->getRules()->getType());
 		}
 	}
 	return "";
@@ -324,17 +325,12 @@ std::string LLMSerializer::serializeCraftRoster(Base* base, Mod* mod, Language* 
 		if (!contents->empty())
 		{
 			ss << "    Equipment: ";
-			int itemCount = 0;
+			bool first = true;
 			for (std::map<std::string, int>::const_iterator it = contents->begin(); it != contents->end(); ++it)
 			{
-				if (itemCount > 0) ss << ", ";
+				if (!first) ss << ", ";
 				ss << it->second << "x " << lang->getString(it->first);
-				itemCount++;
-				if (itemCount >= 10) break; // Limit to first 10 items
-			}
-			if (contents->size() > 10)
-			{
-				ss << ", +" << (contents->size() - 10) << " more";
+				first = false;
 			}
 			ss << "\n";
 		}
@@ -357,7 +353,7 @@ std::string LLMSerializer::serializeCraftRoster(Base* base, Mod* mod, Language* 
 	return ss.str();
 }
 
-std::string LLMSerializer::serializeBaseLayout(Base* base, Mod* mod, Language* lang)
+std::string LLMSerializer::serializeBaseLayout(Base* base, SavedGame* save, Mod* mod, Language* lang)
 {
 	std::ostringstream ss;
 	std::vector<BaseFacility*>* facilities = base->getFacilities();
@@ -425,15 +421,103 @@ std::string LLMSerializer::serializeBaseLayout(Base* base, Mod* mod, Language* l
 		ss << "\n";
 	}
 
-	// Output legend
+	// Output legend - only for facilities present in this base
 	ss << "\nLEGEND:\n";
 	ss << "00 = Empty\n";
 
-	const std::map<std::string, std::string>& codeMap = LLMConfig::getFacilityCodeMap();
-	for (std::map<std::string, std::string>::const_iterator it = codeMap.begin(); it != codeMap.end(); ++it)
+	// Build set of facility codes actually present in grid
+	std::set<std::string> presentCodes;
+	for (int y = 0; y < 6; ++y)
 	{
-		std::string name = lang->getString(it->first);
-		ss << it->second << " = " << name << "\n";
+		for (int x = 0; x < 6; ++x)
+		{
+			if (grid[y][x] != "00")
+			{
+				presentCodes.insert(grid[y][x]);
+			}
+		}
+	}
+
+	// Get discovered research for ACL check
+	const std::vector<const RuleResearch*>& discoveredResearch = save->getDiscoveredResearch();
+	std::set<std::string> researchSet;
+	for (size_t i = 0; i < discoveredResearch.size(); ++i)
+	{
+		researchSet.insert(discoveredResearch[i]->getName());
+	}
+
+	// Build reverse map (code -> facility type) for facilities in base OR unlocked via research
+	std::map<std::string, std::string> codeToName;
+
+	// First, add facilities actually in the base
+	for (size_t i = 0; i < facilities->size(); ++i)
+	{
+		BaseFacility* facility = (*facilities)[i];
+		std::string facilityType = facility->getRules()->getType();
+		std::string code = LLMConfig::getFacilityCode(facilityType);
+
+		// For hangars, we assigned H1, H2, H3, H4 dynamically, so map them all to STR_HANGAR
+		if (code.length() == 2 && code[0] == 'H' && code[1] >= '1' && code[1] <= '4')
+		{
+			// Use the generic hangar name for all hangar codes
+			for (std::set<std::string>::const_iterator it = presentCodes.begin(); it != presentCodes.end(); ++it)
+			{
+				if (it->length() == 2 && (*it)[0] == 'H' && (*it)[1] >= '1' && (*it)[1] <= '4')
+				{
+					if (codeToName.find(*it) == codeToName.end())
+					{
+						std::ostringstream hangarName;
+						hangarName << lang->getString("STR_HANGAR") << " " << (*it)[1];
+						codeToName[*it] = hangarName.str();
+					}
+				}
+			}
+		}
+		else
+		{
+			codeToName[code] = lang->getString(facilityType);
+		}
+	}
+
+	// Second, add facilities unlocked via research (per spec: ACL includes researched facilities)
+	const std::vector<std::string>& allFacilityTypes = mod->getBaseFacilitiesList();
+	for (size_t i = 0; i < allFacilityTypes.size(); ++i)
+	{
+		RuleBaseFacility* facilityRule = mod->getBaseFacility(allFacilityTypes[i]);
+		if (!facilityRule) continue;
+
+		std::string code = LLMConfig::getFacilityCode(allFacilityTypes[i]);
+
+		// Skip if already in legend from built facilities
+		if (codeToName.find(code) != codeToName.end()) continue;
+
+		// Check if requirements are met
+		const std::vector<std::string>& requirements = facilityRule->getRequirements();
+		bool unlocked = true;
+
+		for (size_t j = 0; j < requirements.size(); ++j)
+		{
+			if (researchSet.find(requirements[j]) == researchSet.end())
+			{
+				unlocked = false;
+				break;
+			}
+		}
+
+		// If unlocked, add to legend
+		if (unlocked)
+		{
+			codeToName[code] = lang->getString(allFacilityTypes[i]);
+		}
+	}
+
+	// Output legend entries for present codes only
+	for (std::set<std::string>::const_iterator it = presentCodes.begin(); it != presentCodes.end(); ++it)
+	{
+		if (codeToName.find(*it) != codeToName.end())
+		{
+			ss << *it << " = " << codeToName[*it] << "\n";
+		}
 	}
 
 	return ss.str();
@@ -636,7 +720,7 @@ std::string LLMSerializer::serializeSoldierRoster(SavedGame* save, Mod* mod, Lan
 		if (soldiers->empty())
 			continue;
 
-		ss << "\nBase: " << base->getName() << "\n";
+		ss << "\nBase: " << base->getName() << " (Total soldiers in base: " << soldiers->size() << ")\n";
 
 		for (size_t i = 0; i < soldiers->size(); ++i)
 		{
@@ -672,6 +756,30 @@ std::string LLMSerializer::serializeSoldierRoster(SavedGame* save, Mod* mod, Lan
 			}
 
 			totalSoldiers++;
+		}
+
+		// Show soldiers in transfer to this base
+		std::vector<Transfer*>* transfers = base->getTransfers();
+		int transferCount = 0;
+		for (size_t t = 0; t < transfers->size(); ++t)
+		{
+			Transfer* transfer = (*transfers)[t];
+			if (transfer->getType() == TRANSFER_SOLDIER)
+			{
+				if (transferCount == 0)
+				{
+					ss << "\n  Soldiers In Transfer:\n";
+				}
+				Soldier* soldier = transfer->getSoldier();
+				if (soldier != 0)
+				{
+					int hoursRemaining = transfer->getHours();
+					int daysRemaining = (hoursRemaining + 23) / 24;  // Round up to days
+					ss << "    " << soldier->getName() << " (" << lang->getString(soldier->getRankString())
+					   << ") - Arrives in " << daysRemaining << " day" << (daysRemaining != 1 ? "s" : "") << "\n";
+					transferCount++;
+				}
+			}
 		}
 	}
 

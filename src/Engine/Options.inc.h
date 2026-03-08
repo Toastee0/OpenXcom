@@ -44,6 +44,7 @@ OPT SDLKey keyBattleLeft, keyBattleRight, keyBattleUp, keyBattleDown, keyBattleL
 
 // LLM Interface options
 OPT bool llmInterfaceEnabled, llmGeoscapeEnabled, llmBattlescapeEnabled, llmOutputToLog, llmOutputToFile;
+OPT int llmMaxExports;
 OPT std::string llmOutputPath;
 
 // Flags and other stuff that don't need OptionInfo's.

@@ -1436,6 +1436,7 @@ void GeoscapeState::time1Hour()
 	if (window)
 	{
 		popup(new ItemsArrivingState(this));
+		LLMTriggerManager::onGeoscapeTrigger("TRANSFER_COMPLETE", _game->getSavedGame(), _game->getMod(), _game->getLanguage());
 	}
 	// Handle Production
 	for (std::vector<Base*>::iterator i = _game->getSavedGame()->getBases()->begin(); i != _game->getSavedGame()->getBases()->end(); ++i)

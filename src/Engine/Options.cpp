@@ -298,6 +298,7 @@ void create()
 	_info.push_back(OptionInfo("llmBattlescapeEnabled", &llmBattlescapeEnabled, false));
 	_info.push_back(OptionInfo("llmOutputToLog", &llmOutputToLog, true));
 	_info.push_back(OptionInfo("llmOutputToFile", &llmOutputToFile, false));
+	_info.push_back(OptionInfo("llmMaxExports", &llmMaxExports, 20));
 	_info.push_back(OptionInfo("llmOutputPath", &llmOutputPath, "llm_output.txt"));
 
 }
